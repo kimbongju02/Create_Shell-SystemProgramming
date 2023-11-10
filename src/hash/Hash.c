@@ -33,7 +33,7 @@ int remove_directory(const char *dirname) {
 }
 
 
-int parse(const char *command, char **arguments) {
+int parse(const char *command, char **arguments,int *background) {
     char *token;
     int count = 0;
     char command_copy[strlen(command) + 1];
@@ -42,6 +42,9 @@ int parse(const char *command, char **arguments) {
     while (token != NULL) {
         arguments[count] = (char *)malloc(strlen(token) + 1);
         strcpy(arguments[count], token);
+        if(strcmp(token,"&")==0){
+            &background =1;
+        }
         count++;
         token = strtok(NULL, " ");
     }
@@ -54,7 +57,7 @@ int main() {
     char input[MAX_BUFFER_SIZE];
     struct passwd *user_info;
     user_info = getpwuid(getuid());
-    
+    int background = 0;
     char *argument[9];
 
     while (1) {
@@ -94,23 +97,26 @@ int main() {
         //---------------------------- 명령어
 
         
-        int count = parse(input,argument);
-        
+        int count = parse(input,argument,background);
+        // cd
         if (strcmp(argument[0], "cd")==0){
             change_directory(argument[1]);
             continue;
         }
-
+        // mkdir
         if(strcmp(argument[0],"mkdir")==0){
             make_directory(argument[1]);
             continue;
         }
-        
+        // rmdir
         if(strcmp(argument[0],"rmdir")==0){
             remove_directory(argument[1]);
             continue;
         }
-        
+        // 백그라운드 처리
+        if(background){
+
+        }        
 
         //----------------------------- 명령어 
 
@@ -135,8 +141,11 @@ int main() {
             } else {
 
                 // 부모 프로세스는 자식 프로세스의 종료를 기다림
-                wait(NULL);
-                
+
+                //
+                if(!background){
+                    waitpid(pid,NULL,0);
+                }                
             }
         }
     }
