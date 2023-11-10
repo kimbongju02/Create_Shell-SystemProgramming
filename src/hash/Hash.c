@@ -16,6 +16,23 @@ int change_directory(const char *dirname) {
     return 0;
 }
 
+int make_directory(const char *dirname){
+    if(mkdir(dirname, 0777)!=0){
+        perror("Eror create directory");
+        return -1;
+    }
+    return 0;
+}
+
+int remove_directory(const char *dirname) {
+    if (rmdir(dirname) != 0) {
+        perror("Error removing directory");
+        return -1;
+    }
+    return 0;
+}
+
+
 int parse(const char *command, char **arguments) {
     char *token;
     int count = 0;
@@ -83,6 +100,17 @@ int main() {
             change_directory(argument[1]);
             continue;
         }
+
+        if(strcmp(argument[0],"mkdir")==0){
+            make_directory(argument[1]);
+            continue;
+        }
+        
+        if(strcmp(argument[0],"rmdir")==0){
+            remove_directory(argument[1]);
+            continue;
+        }
+        
 
         //----------------------------- 명령어 
 
