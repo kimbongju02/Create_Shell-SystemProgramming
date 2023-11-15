@@ -6,6 +6,9 @@
 #include <sys/stat.h>
 #include <pwd.h>
 
+#include <fcntl.h>
+#include <signal.h>
+
 #define MAX_BUFFER_SIZE 1024
 
 int change_directory(const char *dirname) {
@@ -39,11 +42,13 @@ int parse(const char *command, char **arguments,int *background) {
     char command_copy[strlen(command) + 1];
     strcpy(command_copy, command);
     token = strtok(command_copy, " ");
+
+    
     while (token != NULL) {
         arguments[count] = (char *)malloc(strlen(token) + 1);
         strcpy(arguments[count], token);
         if(strcmp(token,"&")==0){
-            &background =1;
+            *background = 1;
         }
         count++;
         token = strtok(NULL, " ");
@@ -52,12 +57,17 @@ int parse(const char *command, char **arguments,int *background) {
     return count;
 }
 
+int function(const char *argument){
+
+}
+
 int main() {
 
     char input[MAX_BUFFER_SIZE];
     struct passwd *user_info;
     user_info = getpwuid(getuid());
     int background = 0;
+    int jobs_count = 0;
     char *argument[9];
 
     while (1) {
@@ -94,60 +104,53 @@ int main() {
             break;
         }
 
-        //---------------------------- 명령어
+        int count = parse(input,argument, &background);
 
-        
-        int count = parse(input,argument,background);
-        // cd
-        if (strcmp(argument[0], "cd")==0){
-            change_directory(argument[1]);
-            continue;
-        }
-        // mkdir
-        if(strcmp(argument[0],"mkdir")==0){
-            make_directory(argument[1]);
-            continue;
-        }
-        // rmdir
-        if(strcmp(argument[0],"rmdir")==0){
-            remove_directory(argument[1]);
-            continue;
-        }
-        // 백그라운드 처리
-        if(background){
 
-        }        
-
-        //----------------------------- 명령어 
-
-        // 입력된 명령어 실행
-        if (strlen(input) > 0) {
+        if(background==1){//백그라운드 실행
             int pid = fork();
-
-            if (pid == -1) {
-
-                perror("Error creating child process");
+            if (pid < 0) {
                 exit(EXIT_FAILURE);
-
             } else if (pid == 0) {
-
-                // 자식 프로세스에서 명령어 실행
-                execlp(input, input, (char *)NULL);
-
-                // execlp가 실패할 경우 실행
-                perror("Error executing command");
-                exit(EXIT_FAILURE);
-
+                // 자식 프로세스
+                int exec_result = execvp(argument[0], argument);
+                if (exec_result == -1) {
+                    exit(EXIT_FAILURE);
+                }
             } else {
-
-                // 부모 프로세스는 자식 프로세스의 종료를 기다림
-
-                //
-                if(!background){
-                    waitpid(pid,NULL,0);
-                }                
+                // 부모 프로세스
+                printf("[%d]       %d\n", ++jobs_count, pid);
+                background = 0;
             }
         }
+
+        //---------------------------- 내부 구현 명령어
+        else{
+
+            function(argument[0]);
+
+            if (strcmp(argument[0], "cd")==0){
+            change_directory(argument[1]);
+            continue;
+            }
+        // mkdir
+            if(strcmp(argument[0],"mkdir")==0){
+                make_directory(argument[1]);
+                continue;
+            }
+            // rmdir
+            if(strcmp(argument[0],"rmdir")==0){
+                remove_directory(argument[1]);
+                continue;
+            }
+        }
+        
+        // cd
+        
+
+       
+            
+        
     }
 
     return 0;
