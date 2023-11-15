@@ -1,3 +1,3 @@
-gcc -o Hash Hash.c  # Hash라는 실행 파일을 생성
-sudo cp Hash /usr/local/bin/  # Hash 실행 파일을 /usr/local/bin에 복사
-sudo chmod +x /usr/local/bin/Hash  # 실행 파일에 실행 권한 부여
+gcc -o Hash Hash.c  # create executable Hash
+sudo cp Hash /usr/local/bin/  # copy Hash executable to /usr/local/bin
+sudo chmod +x /usr/local/bin/Hash  # grant execution rights
