@@ -9,9 +9,11 @@
 #include <dirent.h>
 
 #include <fcntl.h>
-#include <signal.h>
+#include <signal.h> 
+#include <string.h>
 
 #define MAX_BUFFER_SIZE 1024
+
 
 int change_directory(const char *dirname) {
     if (chdir(dirname) != 0) {
@@ -53,21 +55,21 @@ int move_file(const char *source_path, const char *destination_path){
     return 0;
 }
 
-int ls(){
-    // open current directory
-    DIR *dir = opendir(".");
+int ls_command(){
+    DIR *dir;
+    struct dirent *entry;
 
-    if(dir == NULL){
+    dir = opendir(".");
+    if (dir == NULL) {
         perror("Fail open Directory");
         return -1;
     }
 
-    struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
         printf("%s\n", entry->d_name);
     }
-    closedir(dir);
 
+    closedir(dir);
     return 0;
 }
 
@@ -77,11 +79,31 @@ int pwd(){
         printf("Current Directory: %s\n", cwd);
     } else {
         perror("Fail Getcwd");
-        return 1;
+        return -1;
     }
 
     return 0;
 }
+
+int file_redirection(char* command){
+    int result = system(command);
+
+    if (result == -1) {
+        perror("File Redirection Fail");
+        return -1;
+    }
+
+    return 0;
+}
+
+void sigint_handler(int signo){
+    printf("\nCtrl-C push!\n");
+}
+
+void sigquit_handler(int signo) {
+    printf("\nCtrl-z push\n");
+}
+
 
 void copy_file(const char *source_path, const char *destination_path) {
     FILE *source_file, *destination_file;
@@ -160,9 +182,20 @@ int main() {
     user_info = getpwuid(getuid());
     int background = 0;
     int jobs_count = 0;
-    char *argument[9];
-
+    
     while (1) {
+        char *argument[9] = {NULL};
+        
+        struct sigaction act_c;
+        act_c.sa_handler = sigint_handler;
+        sigfillset(&(act_c.sa_mask));
+        sigaction(SIGINT, &act_c, NULL);
+
+        struct sigaction act_z;
+        act_z.sa_handler = sigquit_handler;
+        sigfillset(&(act_z.sa_mask));
+        sigaction(SIGQUIT, &act_z, NULL);        
+
         // get hostname
         char host_name[MAX_BUFFER_SIZE];
         if (gethostname(host_name, MAX_BUFFER_SIZE) != 0) {
@@ -275,15 +308,34 @@ int main() {
                 continue;
             }
 
-            // ls
-            if(strcmp(argument[0], "ls")==0){
-                ls();
-                continue;
-            }
 
             // pwd
             if(strcmp(argument[0], "pwd")==0){
                 pwd();
+                continue;
+            }
+
+            // file redirection >
+            if (argument[1]!= NULL && strcmp(argument[1], ">") == 0) {
+                char command[100];
+                strcpy(command, argument[0]);
+                
+                if (argument[2] != NULL) {
+                    strcat(command, " ");
+                    strcat(command, argument[1]);
+                    strcat(command, " ");
+                    strcat(command, argument[2]);
+                }
+                else{
+                    perror("use 'a > b'");
+                }
+                file_redirection(command);
+                continue;
+            }
+
+            // ls
+            if (strcmp(argument[0], "ls") == 0) {
+                ls_command();
                 continue;
             }
         } 
