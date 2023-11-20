@@ -6,6 +6,7 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <pwd.h>
+#include <dirent.h>
 
 #include <fcntl.h>
 #include <signal.h>
@@ -49,6 +50,36 @@ int move_file(const char *source_path, const char *destination_path){
         perror("Error moving file");
         return -1;
     }
+    return 0;
+}
+
+int ls(){
+    // open current directory
+    DIR *dir = opendir(".");
+
+    if(dir == NULL){
+        perror("Fail open Directory");
+        return -1;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        printf("%s\n", entry->d_name);
+    }
+    closedir(dir);
+
+    return 0;
+}
+
+int pwd(){
+    char cwd[MAX_BUFFER_SIZE];
+   if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        printf("Current Directory: %s\n", cwd);
+    } else {
+        perror("Fail Getcwd");
+        return 1;
+    }
+
     return 0;
 }
 
@@ -241,6 +272,18 @@ int main() {
             // cp
             if(strcmp(argument[0], "mv")==0){
                 move_file(argument[1], argument[2]);
+                continue;
+            }
+
+            // ls
+            if(strcmp(argument[0], "ls")==0){
+                ls();
+                continue;
+            }
+
+            // pwd
+            if(strcmp(argument[0], "pwd")==0){
+                pwd();
                 continue;
             }
         } 
