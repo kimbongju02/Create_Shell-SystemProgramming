@@ -40,12 +40,40 @@ int remove_directory(const char *dirname) {
 }
 
 int remove_file(const char *file_path) {
-    if (unlink(file_path) != 0) {
+    
+}
+/*
+if (unlink(file_path) != 0) {
         perror("Error removing file");
         return -1;
     }
-    return 0;
-}
+return 0;
+
+*/
+
+/*
+                char *path = argument[1];
+                struct stat file_info;
+
+                if (stat(path, &file_info) == 0) {
+                    // file
+                    if (S_ISREG(file_info.st_mode)) {
+                         if (remove_file(path) == 0) {
+                            printf("file deletion successful: %s\n", path);
+                        }
+                    // directory
+                    } else if (S_ISDIR(file_info.st_mode)) {
+                        if (remove_directory(path) == 0) {
+                            printf("directory deletion successful: %s\n", path);
+                        }
+                    // not file and directory
+                    } else {
+                        printf("%s not file and directory.\n", path);
+                    }
+                } else {
+                    perror("read file error");
+                }
+*/
 
 int move_file(const char *source_path, const char *destination_path){
     if (rename(source_path, destination_path) != 0) {
@@ -55,7 +83,7 @@ int move_file(const char *source_path, const char *destination_path){
     return 0;
 }
 
-int ls_command(){
+int list(){
     DIR *dir;
     struct dirent *entry;
 
@@ -70,18 +98,6 @@ int ls_command(){
     }
 
     closedir(dir);
-    return 0;
-}
-
-int pwd(){
-    char cwd[MAX_BUFFER_SIZE];
-   if (getcwd(cwd, sizeof(cwd)) != NULL) {
-        printf("Current Directory: %s\n", cwd);
-    } else {
-        perror("Fail Getcwd");
-        return -1;
-    }
-
     return 0;
 }
 
@@ -104,7 +120,40 @@ void sigquit_handler(int signo) {
     printf("\nCtrl-z push\n");
 }
 
+// pwd
+void print_working_directory(){
+    char *pwd;
+    pwd = getcwd(NULL,0);
+    if(pwd != NULL){
+        printf("%s\n",pwd);
+        free(pwd);
+    }
+    else{
+        perror("getcwd");
+        exit(EXIT_FAILURE);
+    }
+}
+// cat
+void concatenate(const char *filename, FILE *output_file) {
+    FILE *file = fopen(filename, "r");
 
+    if (file == NULL) {
+        perror("Error opening file");
+        exit(EXIT_FAILURE);
+    }
+
+    int ch;
+    while ((ch = fgetc(file)) != EOF) {
+        putchar(ch);
+
+        // 리다이렉션 파일이 열려있는 경우 해당 파일에도 쓰기
+        if (output_file != NULL) {
+            fputc(ch, output_file);
+        }
+    }
+
+    fclose(file);
+}
 void copy_file(const char *source_path, const char *destination_path) {
     FILE *source_file, *destination_file;
     char buffer[1024];
@@ -171,17 +220,16 @@ int parse(const char *command, char **arguments,int *background) {
     return count;
 }
 
-int function(const char *argument){
-
-}
-
-int main() {
+int main(int argc, char *argv[]) {
 
     char input[MAX_BUFFER_SIZE];
     struct passwd *user_info;
     user_info = getpwuid(getuid());
     int background = 0;
     int jobs_count = 0;
+
+    FILE *output_file = NULL; // 리다이렉션을 위한 파일 cat t1.txt > t2.txt 의 경우 t1.txt를 
+    // 이 변수에 담는다.
     
     while (1) {
         char *argument[9] = {NULL};
@@ -208,8 +256,8 @@ int main() {
             perror("Error getting current working directory");
             exit(EXIT_FAILURE);
         }
-        // show prompts
 
+        // show prompts
         printf("%s@%s:%s> ", user_info->pw_name, host_name, initial_cwd);
         fflush(stdout);
 
@@ -217,7 +265,6 @@ int main() {
         if (fgets(input, MAX_BUFFER_SIZE, stdin) == NULL) {
             perror("Error reading input");
             exit(EXIT_FAILURE);
-
         }
 
         // remove new line characters
@@ -230,7 +277,6 @@ int main() {
         }
 
         int count = parse(input,argument, &background);
-
 
         if(background==1){// background run
             int pid = fork();
@@ -251,8 +297,12 @@ int main() {
 
         //---------------------------- Internal Implementation Commands
         else{
+            //pwd
+            if (strcmp(argument[0], "pwd")==0){
+                print_working_directory();
+                continue;
+            }
 
-            function(argument[0]);
             // cd
             if (strcmp(argument[0], "cd")==0){
                 change_directory(argument[1]);
@@ -279,27 +329,13 @@ int main() {
 
             // rm
             if(strcmp(argument[0], "rm")==0){
-                char *path = argument[1];
-                struct stat file_info;
+                remove_file(argument[1]);
+                continue;
+            }
 
-                if (stat(path, &file_info) == 0) {
-                    // file
-                    if (S_ISREG(file_info.st_mode)) {
-                         if (remove_file(path) == 0) {
-                            printf("file deletion successful: %s\n", path);
-                        }
-                    // directory
-                    } else if (S_ISDIR(file_info.st_mode)) {
-                        if (remove_directory(path) == 0) {
-                            printf("directory deletion successful: %s\n", path);
-                        }
-                    // not file and directory
-                    } else {
-                        printf("%s not file and directory.\n", path);
-                    }
-                } else {
-                    perror("read file error");
-                }
+            if (strcmp(argument[0], "ls") == 0) {
+                list();
+                continue;
             }
 
             // cp
@@ -308,13 +344,27 @@ int main() {
                 continue;
             }
 
-
-            // pwd
-            if(strcmp(argument[0], "pwd")==0){
-                pwd();
+            //cat
+            if(strcmp(argument[0], "cat")==0){
+                concatenate(argument[1], output_file);
                 continue;
             }
 
+            // doogunwo version redirection >
+            const char *input_filename = argv[1];
+            const char *output_filename = (argc == 3) ? argv[2] : NULL;
+            if(output_file != NULL){
+                output_file = fopen(output_filename,"w");
+                if(output_file == NULL){
+                    perror("Error opening output file");
+                    exit(EXIT_FAILURE);
+                }
+            }
+            if (output_file != NULL) {
+                fclose(output_file);
+            }
+
+            /**/
             // file redirection >
             if (argument[1]!= NULL && strcmp(argument[1], ">") == 0) {
                 char command[100];
@@ -333,11 +383,8 @@ int main() {
                 continue;
             }
 
-            // ls
-            if (strcmp(argument[0], "ls") == 0) {
-                ls_command();
-                continue;
-            }
+           
+        
         } 
     }
 
