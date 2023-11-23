@@ -13,7 +13,7 @@
 #include <string.h>
 
 #define MAX_BUFFER_SIZE 1024
-
+#define MAXARG 7
 
 int change_directory(const char *dirname) {
     if (chdir(dirname) != 0) {
@@ -130,7 +130,7 @@ void print_working_directory(){
     }
     else{
         perror("getcwd");
-        exit(EXIT_FAILURE);
+        return;
     }
 }
 // cat
@@ -139,7 +139,7 @@ void concatenate(const char *filename, FILE *output_file) {
 
     if (file == NULL) {
         perror("Error opening file");
-        exit(EXIT_FAILURE);
+        return;
     }
 
     int ch;
@@ -154,6 +154,7 @@ void concatenate(const char *filename, FILE *output_file) {
 
     fclose(file);
 }
+
 void copy_file(const char *source_path, const char *destination_path) {
     FILE *source_file, *destination_file;
     char buffer[1024];
@@ -199,6 +200,120 @@ void copy_file(const char *source_path, const char *destination_path) {
     fclose(destination_file);
 }
 
+// start redirection and pipe
+int tokenized(char buff[], char* arg[] ,char delim[]){
+    char* saveptr;
+    char* s;
+    int num = 0;
+    
+    s = strtok_r(buff, delim, &saveptr);
+    while(s) {
+        arg[num++] = s;
+        s = strtok_r(NULL, delim, &saveptr);
+    }
+    
+    arg[num] = (char *)0;
+    
+    return num;
+}
+int checkInput(char buf[]){
+    if(strcmp(buf, "")!=0 && strcmp(buf, "\t")!=0 && strcmp(buf, " ")!=0)
+        return 0;
+    return 1;
+}
+void executesLine(int isbg, char *argv[]){
+    int status, pid;
+
+    if ((pid=fork()) == -1)
+        perror("fork failed");
+    else if (pid != 0) {
+        if(isbg==0)
+             pid = wait(&status);
+        else {
+             printf("[1] %d\n", getpid());
+             waitpid(pid, &status, WNOHANG);    
+        }
+    } else {
+        execvp(argv[0], argv);
+    }
+}
+void doPipe(char* arg1[], char* arg2[]){
+    int fd[2];
+    if(pipe(fd) == -1) {
+        perror("Pipe failed");
+        exit(1);
+    }
+
+    if(fork() == 0){            
+        close(STDOUT_FILENO);  
+        dup2(fd[1], 1);        
+        close(fd[0]);    
+        close(fd[1]);
+
+        execvp(arg1[0], arg1);
+        perror("parent execvp failed");
+        exit(1);
+    }
+
+    if(fork() == 0) {           
+        close(STDIN_FILENO); 
+        dup2(fd[0], 0);      
+        close(fd[1]);  
+        close(fd[0]);
+
+        execvp(arg2[0], arg2);
+        perror("child execvp failed");
+        exit(1);
+    }
+
+    close(fd[0]);
+    close(fd[1]);
+    wait(0);
+    wait(0);
+}
+void doRedirection(int flag, int is_bg, char *argv[], char* input, char * output){
+    int input_fd, output_fd;
+    int status, pid;
+    
+    if ((pid=fork()) == -1)
+        perror("fork failed");
+    else if (pid != 0) {
+        if(is_bg==0)
+            pid = wait(&status);
+        else {
+            printf("[1] %d\n", getpid());
+            waitpid(pid, &status, WNOHANG);
+        }
+    } else {
+        if (flag == 2) {
+            if((input_fd = open(input, O_RDONLY))==-1){
+                perror(argv[0]);
+                exit(2);
+            }
+            dup2(input_fd, 0);
+            close(input_fd);
+            execvp(argv[0], argv);
+        } else if (flag == 3) {
+            output_fd = open(output, O_CREAT|O_TRUNC|O_WRONLY, 0600);
+            dup2(output_fd, 1);
+            close(output_fd);
+            execvp(argv[0], argv);
+        } else {
+            if (input != NULL && output != NULL) {
+                input_fd = open(input, O_RDONLY);
+                dup2(input_fd, 0);
+                close(input_fd);
+                
+                output_fd = open(output, O_CREAT|O_TRUNC|O_WRONLY, 0600);
+                dup2(output_fd, 1);
+                close(output_fd);
+                execvp(argv[0], argv);
+            }
+        }
+    }
+}
+// end redirection and pipe
+
 int parse(const char *command, char **arguments,int *background) {
     char *token;
     int count = 0;
@@ -227,6 +342,25 @@ int main(int argc, char *argv[]) {
     user_info = getpwuid(getuid());
     int background = 0;
     int jobs_count = 0;
+    
+    // start redirection and pipe variable
+    int num_args = 0, i=0, num_arg=0;
+    char* arg[MAXARG];
+    char* s;
+    char* saveptr;
+    int pid, status;
+    
+    int num = 0;
+    int j = 0;
+    int m = 0;
+    int brpoint = 0;
+    char *pipe_arg1[MAXARG];
+    char *pipe_arg2[MAXARG];
+    char input_file[20] = "";
+    char output[20] = "";
+    int is_bg = 0;
+    static const char delim[] = " \t\n";
+    //end redirection and pipe variable
 
     FILE *output_file = NULL; // 리다이렉션을 위한 파일 cat t1.txt > t2.txt 의 경우 t1.txt를 
     // 이 변수에 담는다.
@@ -276,7 +410,7 @@ int main(int argc, char *argv[]) {
             break;
         }
 
-        int count = parse(input,argument, &background);
+        int count = parse(input, argument, &background);
 
         if(background==1){// background run
             int pid = fork();
@@ -297,96 +431,120 @@ int main(int argc, char *argv[]) {
 
         //---------------------------- Internal Implementation Commands
         else{
-            //pwd
-            if (strcmp(argument[0], "pwd")==0){
-                print_working_directory();
+            if(argument[0] == NULL){
                 continue;
+            }
+            // redirection and pipe
+            if(strchr(input, '>') != NULL || strchr(input, '<') != NULL || strchr(input, '|') != NULL){
+                num_args =0;
+                if (strchr(input, ';') != NULL) {
+                    num_args = tokenized(input, argument, ";");
+                } else {
+                    num_args = 1;
+                    argument[0] = input;
+                    argument[1] = (char *)0;
+                }
+
+                for (i = 0; i<num_args; i++) {
+                num = 0;
+                brpoint = 0;
+                m = 0;
+                is_bg = 0;
+                s = strtok_r(argument[i], delim, &saveptr);
+                
+                    while(s) {
+                        if (strcmp(s, "|") == 0) {
+                            m = 1;
+                            brpoint = num;
+                            for (j =0; j < brpoint; j++) {
+                                pipe_arg1[j] =  arg[j];
+                            }
+                            pipe_arg1[brpoint] = (char *) 0;
+                        } else if (strcmp(s, "<") == 0) {
+                            m = 2;
+                            brpoint = num;
+                        } else if (strcmp(s, ">") == 0) {
+                            if (m == 2)
+                                m = 4;
+                            else
+                                m = 3;
+                        } else {
+                            if(m < 2)
+                                arg[num++] = s;
+                            else if(m ==2)
+                                strcpy(input_file, s);
+                            else
+                                strcpy(output, s);
+                        }
+                        
+                        s = strtok_r(NULL, delim, &saveptr);
+                        
+                    }
+                    arg[num] = (char *)0;
+                    
+                    if (m == 0) {
+                        executesLine(is_bg, arg);
+                    }
+                    else if (m == 1) {
+                        for (j =0; j < num-brpoint; j++) {
+                            pipe_arg2[j]= arg[j+brpoint];
+                        }
+                        pipe_arg2[num-brpoint] = (char *) 0;
+                        doPipe(pipe_arg1, pipe_arg2);
+                    } else if(m >= 2) {
+                        doRedirection(m, is_bg, arg, input_file, output);
+                    }       
+                }
+            }
+
+            //pwd
+            else if (strcmp(argument[0], "pwd")==0){
+                print_working_directory();
             }
 
             // cd
-            if (strcmp(argument[0], "cd")==0){
+            else if (strcmp(argument[0], "cd")==0){
                 change_directory(argument[1]);
-                continue;
             }
 
             // mkdir
-            if(strcmp(argument[0],"mkdir")==0){
+            else if(strcmp(argument[0],"mkdir")==0){
                 make_directory(argument[1]);
-                continue;
             }
 
             // rmdir
-            if(strcmp(argument[0],"rmdir")==0){
+            else if(strcmp(argument[0],"rmdir")==0){
                 remove_directory(argument[1]);
-                continue;
             }
 
             // cp
-            if(strcmp(argument[0], "cp")==0){
+            else if(strcmp(argument[0], "cp")==0){
                 copy_file(argument[1], argument[2]);
-                continue;
             }
 
             // rm
-            if(strcmp(argument[0], "rm")==0){
+            else if(strcmp(argument[0], "rm")==0){
                 remove_file(argument[1]);
-                continue;
             }
 
-            if (strcmp(argument[0], "ls") == 0) {
+            else if (strcmp(argument[0], "ls") == 0) {
                 list();
-                continue;
             }
 
             // cp
-            if(strcmp(argument[0], "mv")==0){
+            else if(strcmp(argument[0], "mv")==0){
                 move_file(argument[1], argument[2]);
-                continue;
             }
 
             //cat
-            if(strcmp(argument[0], "cat")==0){
+            else if(strcmp(argument[0], "cat")==0){
                 concatenate(argument[1], output_file);
-                continue;
             }
 
-            // doogunwo version redirection >
-            const char *input_filename = argv[1];
-            const char *output_filename = (argc == 3) ? argv[2] : NULL;
-            if(output_file != NULL){
-                output_file = fopen(output_filename,"w");
-                if(output_file == NULL){
-                    perror("Error opening output file");
-                    exit(EXIT_FAILURE);
-                }
+            else{
+                printf("not command\n");
             }
-            if (output_file != NULL) {
-                fclose(output_file);
-            }
-
-            /**/
-            // file redirection >
-            if (argument[1]!= NULL && strcmp(argument[1], ">") == 0) {
-                char command[100];
-                strcpy(command, argument[0]);
-                
-                if (argument[2] != NULL) {
-                    strcat(command, " ");
-                    strcat(command, argument[1]);
-                    strcat(command, " ");
-                    strcat(command, argument[2]);
-                }
-                else{
-                    perror("use 'a > b'");
-                }
-                file_redirection(command);
-                continue;
-            }
-
-           
-        
         } 
     }
-
     return 0;
 }
