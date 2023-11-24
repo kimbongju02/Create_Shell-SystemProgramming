@@ -40,7 +40,33 @@ int remove_directory(const char *dirname) {
 }
 
 int remove_file(const char *file_path) {
-    
+
+    if (unlink(file_path) != 0) {
+        perror("Error removing file");
+        return -1;
+    }
+
+    struct stat file_info;
+
+    if (stat(file_path, &file_info) == 0) {
+        // file
+            if (S_ISREG(file_info.st_mode)) {
+                if (remove_file(file_path) == 0) {
+                    printf("file deletion successful: %s\n", file_path);
+                }
+            // directory
+            } else if (S_ISDIR(file_info.st_mode)) {
+                if (remove_directory(file_path) == 0) {
+                    printf("directory deletion successful: %s\n", file_path);
+                }
+            // not file and directory
+            } else {
+                printf("%s not file and directory.\n", file_path);
+            }
+        } else {
+            perror("read file error");
+        }
+    return 0;
 }
 /*
 if (unlink(file_path) != 0) {
