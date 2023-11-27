@@ -304,3 +304,9 @@ int parse(const char *command, char **arguments,int *background) {
 
     return count;
 }
+
+// symbolic links
+void symbolic_link(const char *source_path, const char *destination_path){
+    if(symlink(source_path, destination_path) == -1)
+        perror("symbolic link error");
+}

@@ -22,5 +22,6 @@ void executesLine(int is_bg, char *argv[]);
 void doPipe(char* arg1[], char* arg2[]);
 void doRedirection(int flag, int is_bg, char *argv[], char* input, char * output);
 int parse(const char *command, char **arguments, int *background);
+void symbolic_link(const char *source_path, const char *destination_path);
 
 #endif

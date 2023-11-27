@@ -220,6 +220,11 @@ int main(int argc, char *argv[]) {
                 concatenate(argument[1], output_file);
             }
 
+            // symbolic link
+            else if(strcmp(argument[0], "ln")==0){
+                symbolic_link(argument[1], argument[2]);
+            }
+
             else{
                 printf("not command\n");
             }
