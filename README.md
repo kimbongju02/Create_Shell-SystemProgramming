@@ -12,5 +12,7 @@
 
 도건우 : exit, cd mkdir rmdir, pwd, cat, rm 명령어 와 프로젝트 구조 및 main.c 구조 ,  백그라운드 & 구현
 
+문준석 : 수행 내용 없음
+
 
 Handler + shell = Hash -> 프로그램 시작 명령어
